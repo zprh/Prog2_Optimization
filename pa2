@@ -1,0 +1,60 @@
+#!/usr/bin/env Rscript
+args <- commandArgs(TRUE)
+library("R.matlab")
+library("Rglpk")
+
+#INPUT
+networkpath <-file.path(getwd(),args[1]) 
+mode<- (args[2])
+name <- (args[3])
+
+#NETWORK
+networks <-readMat(networkpath) 
+S <-(networks$network[1])
+rev<-c(unlist(networks$network[2]))
+rxns <-c(unlist(networks$network[3]))
+lb <-c(unlist(networks$network[4]))
+ub <- c(unlist(networks$network[5]))
+description = unlist(networks$network[6])
+
+#AUX_STUFF
+indices <- c(grep("biomass",c(rxns)))
+dim <- unlist(S[[1]]@Dim)
+vectornames <-vector()
+vectorrates <- vector()
+#PARAMETERS
+mtrx <- S[[1]]
+rhs.b <-rep(0,dim[1])
+constr.dir <-c(rep("==",dim[1]))
+bounds1 <- list(lower=c(lb),upper=c(ub))
+
+if (mode == "BIOMASS") {
+  obj.fct.c1 = rep(0,dim[2])
+  obj.fct.c1[(indices[1])] <-1
+  max.value <- Rglpk_solve_LP(obj.fct.c1,mtrx,constr.dir,rhs.b,bounds1,types="I",max = TRUE)
+  bio.opt= max.value$optimum
+  output <-rxns[indices[1]]
+  output<-c(output,bio.opt)
+  for(i in seq(1:dim[1])){
+    obj.fct.c2 = rep(0,dim[2])
+    obj.fct.c2[i]<- 1
+    if(i== indices[1]){next}
+    else{
+      max.value <- Rglpk_solve_LP(obj.fct.c2,mtrx,constr.dir,rhs.b,bounds1,types="I",max = TRUE)
+      output <-c(output,rxns[i])
+      output<-c(output,max.value$optimum)
+    }
+  }
+  write(output, file=name,ncolumns = 2,sep = "\t")
+} else {
+  for (i in seq(1:dim[1])){
+    obj.fct.c3 = rep(0,dim[2])
+    obj.fct.c3[i]<- 1
+    max.value <- Rglpk_solve_LP(obj.fct.c3,mtrx,constr.dir,rhs.b,bounds1,types="I",max = TRUE)
+    min.value <- Rglpk_solve_LP(obj.fct.c3,mtrx,constr.dir,rhs.b,bounds1,types="I",max = FALSE)
+    if (max.value$optimum==min.value$optimum && min.value$optimum==0){
+      vectornames <-c(vectornames,rxns[i])
+    }
+  }
+  print(vectornames)
+}
