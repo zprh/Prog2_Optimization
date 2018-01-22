@@ -1,0 +1,63 @@
+library(Rglpk)
+library(R.matlab)
+
+## read .mat file
+File <- file.path("ecoli_iJO1366.mat")
+data<-readMat(File)
+S <- data[[1]][1]  
+rev <- data[[1]][2]
+rxns <- data[[1]][3]
+lb <- data[[1]][4]
+ub<- data[[1]][5]
+description <- data[[1]][6]
+
+size.var<-ncol(S[[1]])
+size.constr<-nrow(S[[1]])
+## searching the BIOMASS reaction
+index.obj <- grep(pattern="biomass",rxns[[1]])
+
+bio.id<-c()
+## solve the BIOMASS reactions
+for(i in 1:length(index.obj))
+{
+  obj.fun <-integer(size.var)
+  obj.fun[index.obj[i]]=1
+  constr <- S[[1]]
+  constr.dir <- rep("==",size.constr) 
+  rhs <- integer(size.constr)
+  bounds <- list(lb[[1]],ub[[1]])
+  bio.max<-Rglpk_solve_LP(obj.fun, constr, constr.dir,
+                 rhs, bounds, max=TRUE)
+  bio.id<-c(bio.id,rxns[[1]][index.obj[i]])
+}
+
+for(i in 1:size.var){
+  for(j in 1:length(index.obj)){
+    if(index.obj[j]!=i){
+      bio.id<-c(bio.id,rxns[[1]][i])
+      bio.max<-c(bio.max,0)
+    }
+  }
+}
+biomass<-I(list(bio.id,bio.max))
+write.table(biomass,file = "BIOMASS mode.txt",quote = FALSE,row.names = FALSE)
+## solve the BLOCKED reactions
+blk.name<-c()
+for(i in 1:size.var)
+{
+  obj.fun <-integer(size.var)
+  obj.fun[i]=1
+  constr <- S[[1]]
+  constr.dir <- rep("==",size.constr) 
+  rhs <- integer(size.constr)
+  bounds <- list(lb[[1]],ub[[1]])
+  Max <- Rglpk_solve_LP(obj.fun, constr, constr.dir,
+                 rhs, bounds, max=TRUE)
+  Min <- Rglpk_solve_LP(obj.fun, constr, constr.dir,
+                        rhs, bounds, max=FALSE)
+  if(Max[[2]]==0 && Min[[2]]==0){
+    # BLOCKED reaction
+    blk.name<-c(blk.name,rxns[[1]][i])
+  }
+}
+print(blk.name)
